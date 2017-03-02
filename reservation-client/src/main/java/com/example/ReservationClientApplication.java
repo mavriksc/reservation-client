@@ -21,6 +21,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.integration.annotation.Gateway;
 import org.springframework.integration.annotation.MessagingGateway;
+import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,7 +32,7 @@ import org.springframework.web.client.RestTemplate;
 
 import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 
-//@EnableBinding(Source.class)
+@EnableBinding(Source.class)
 @EnableCircuitBreaker
 @EnableZuulProxy
 @EnableDiscoveryClient
@@ -50,19 +51,6 @@ public class ReservationClientApplication {
 	
 }
 
-//@MessagingGateway
-//interface ReservationWriter {
-//
-//    @Gateway(requestChannel = "output")
-//    void write(String rn);
-//}
-
-//interface ReservationChannels {
-//
-//    @Output
-//    MessageChannel output();
-//}
-
 @RestController
 @RequestMapping("/reservations")
 class ReservationApiGatewayRestController{
@@ -70,17 +58,14 @@ class ReservationApiGatewayRestController{
     @Autowired
     private RestTemplate restTemplate;
     
-//    private final ReservationWriter reservationWriter;
-//    
-//    @Autowired
-//    public ReservationApiGatewayRestController( ReservationWriter reservationWriter) {
-//        this.reservationWriter = reservationWriter;
-//    }
+    @Autowired 
+    private Source source;
+    
     
     @RequestMapping(method = RequestMethod.POST)
-    public void writeReservation(@RequestBody Reservation r){
-       
-        
+    public void writeReservation(@RequestBody Reservation r) {
+       Message<String> msg = MessageBuilder.withPayload(r.getReservationName()).build();
+       this.source.output().send(msg);        
     }
     
     public Collection<String> getReservationNamesFallback(){
@@ -91,7 +76,8 @@ class ReservationApiGatewayRestController{
     @RequestMapping(method = RequestMethod.GET,value = "/names")
     public Collection<String> getReservationNames(){
         ParameterizedTypeReference<Resources<Reservation>> ptr = 
-                new ParameterizedTypeReference<Resources<Reservation>>() { };
+             // the { } bakes in the types so we can get res names vvv down there
+                new ParameterizedTypeReference<Resources<Reservation>>() { }; 
         ResponseEntity<Resources<Reservation>> entity =  this.restTemplate
                 .exchange("http://reservation-service/reservations", HttpMethod.GET, null, ptr);
         return entity.getBody().getContent()
@@ -99,12 +85,8 @@ class ReservationApiGatewayRestController{
                 .map(Reservation::getReservationName)
                 .collect(Collectors.toList());
         
-    }
-    
-//    @RequestMapping(method = RequestMethod.POST)
-//    public void write(@RequestBody Reservation reservation) {
-//        this.reservationWriter.write(reservation.getReservationName());
-//    }
+    }  
+
 }
 
 class Reservation {
